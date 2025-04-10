@@ -59,17 +59,6 @@ A simple **macOS** application built with **SwiftUI** that allows you to:
 
 ---
 
-## Screenshots
-
-*(Optionally include images or GIFs showing the UI. Example placeholder:)*
-
-```
-[Example screenshot 1]
-[Example screenshot 2]
-```
-
----
-
 ## Installation
 
 1. **Install Xcode** (version 13 or higher, recommended macOS 12+).  
