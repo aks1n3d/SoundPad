@@ -72,7 +72,8 @@ final class PlaybackEngine: ObservableObject {
     // MARK: - Play / stop
 
     func toggle(item: SoundPadItem) {
-        if isPlaying(item.id) {
+        // A pad that is fading out re-triggers instead of restarting the fade.
+        if isPlaying(item.id), pads[item.id]?.isFadingOut != true {
             stop(item: item)
         } else {
             play(item: item)
@@ -115,7 +116,7 @@ final class PlaybackEngine: ObservableObject {
             startUITimerIfNeeded()
 
             if useFade {
-                startFade(pad, to: target, fadingOut: false)
+                startFade(pad, itemID: item.id, to: target, fadingOut: false)
             }
         } catch {
             print("SoundPad: cannot play \(item.title): \(error)")
@@ -127,11 +128,22 @@ final class PlaybackEngine: ObservableObject {
         pad.fadeTask?.cancel()
         pad.fadeTask = nil
         if fadeEnabled {
-            startFade(pad, to: 0, fadingOut: true)
+            startFade(pad, itemID: item.id, to: 0, fadingOut: true)
         } else {
-            // Completion handler removes it from playingItemIDs.
-            pad.node.stop()
+            finishStop(pad, itemID: item.id)
         }
+    }
+
+    /// Stop a node and clear its playing state synchronously, so an immediate
+    /// follow-up toggle sees the pad as idle (the completion handler's hop to
+    /// the main actor would otherwise leave a stale-playing window).
+    private func finishStop(_ pad: PadPlayer, itemID: UUID) {
+        pad.generation += 1
+        pad.isFadingOut = false
+        pad.node.stop()
+        playingItemIDs.remove(itemID)
+        progress[itemID] = 0
+        stopUITimerIfIdle()
     }
 
     func stopAllPlayback() {
@@ -206,9 +218,14 @@ final class PlaybackEngine: ObservableObject {
     private func applyEffectiveVolume(to pad: PadPlayer, id: UUID) {
         // A fade-out in flight already heads to 0 and then stops — leave it.
         guard !pad.isFadingOut else { return }
-        pad.fadeTask?.cancel()
-        pad.fadeTask = nil
-        pad.node.volume = effectiveVolume(for: id)
+        let target = effectiveVolume(for: id)
+        if pad.fadeTask != nil {
+            // A fade-in is in flight; redirect it smoothly instead of snapping.
+            pad.fadeTask?.cancel()
+            startFade(pad, itemID: id, to: target, fadingOut: false)
+        } else {
+            pad.node.volume = target
+        }
     }
 
     private func applyEffectiveVolumes() {
@@ -219,11 +236,11 @@ final class PlaybackEngine: ObservableObject {
 
     // MARK: - Fades
 
-    private func startFade(_ pad: PadPlayer, to target: Float, fadingOut: Bool) {
+    private func startFade(_ pad: PadPlayer, itemID: UUID, to target: Float, fadingOut: Bool) {
         let steps = FadeCurve.steps(from: pad.node.volume, to: target, count: fadeStepCount)
         let stepNanos = UInt64(fadeDuration / Double(fadeStepCount) * 1_000_000_000)
         pad.isFadingOut = fadingOut
-        pad.fadeTask = Task { @MainActor [weak pad] in
+        pad.fadeTask = Task { @MainActor [weak self, weak pad] in
             for volume in steps {
                 try? await Task.sleep(nanoseconds: stepNanos)
                 guard !Task.isCancelled, let pad else { return }
@@ -233,8 +250,7 @@ final class PlaybackEngine: ObservableObject {
             pad.fadeTask = nil
             pad.isFadingOut = false
             if fadingOut {
-                // Completion handler clears playing state.
-                pad.node.stop()
+                self?.finishStop(pad, itemID: itemID)
             }
         }
     }
@@ -281,7 +297,9 @@ final class PlaybackEngine: ObservableObject {
     /// Route THIS APP's audio to the device with the given UID
     /// (nil = follow the system default). Never touches the system setting.
     func setOutputDevice(uid: String?) {
-        outputDeviceUID = (uid?.isEmpty == true) ? nil : uid
+        let normalized = (uid?.isEmpty == true) ? nil : uid
+        guard normalized != outputDeviceUID else { return }
+        outputDeviceUID = normalized
         let wasRunning = engine.isRunning
         if wasRunning {
             stopAllPlayback()
@@ -290,14 +308,21 @@ final class PlaybackEngine: ObservableObject {
         applyOutputDevice()
     }
 
+    // Non-nil once we've pinned the output unit to an explicit device.
+    private var pinnedDeviceID: AudioDeviceID?
+
     private func applyOutputDevice() {
         guard let audioUnit = engine.outputNode.audioUnit else { return }
         var deviceID: AudioDeviceID
         if let uid = outputDeviceUID, let id = audioDeviceID(forUID: uid) {
             deviceID = id
-        } else if let systemDefault = systemDefaultOutputDeviceID() {
+        } else if pinnedDeviceID != nil, let systemDefault = systemDefaultOutputDeviceID() {
+            // Was pinned to an explicit device; repoint at the current default.
+            // (Automatic default-following resumes on the next app launch —
+            // an explicitly set output unit no longer tracks default changes.)
             deviceID = systemDefault
         } else {
+            // Never touched: the output unit follows the system default natively.
             return
         }
         AudioUnitSetProperty(audioUnit,
@@ -306,6 +331,7 @@ final class PlaybackEngine: ObservableObject {
                              0,
                              &deviceID,
                              UInt32(MemoryLayout<AudioDeviceID>.size))
+        pinnedDeviceID = deviceID
     }
 
     // MARK: - Progress (one shared timer, only while something plays)

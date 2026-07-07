@@ -4,18 +4,44 @@
 //  the session directory is injectable so all of this is unit-testable.
 //
 
+import AppKit
 import Foundation
 
 @MainActor
 final class BankStore: ObservableObject {
-    @Published var banks: [SoundBank] = []
+    @Published var banks: [SoundBank] = [] {
+        didSet { scheduleAutosave() }
+    }
     @Published var selectedBankIndex: Int = 0
 
     private let sessionDirectory: URL
+    private var autosaveTask: Task<Void, Never>?
+    private var terminateObserver: NSObjectProtocol?
 
     init(sessionDirectory: URL = BankStore.defaultSessionDirectory()) {
         self.sessionDirectory = sessionDirectory
         loadSession()
+        // The debounced autosave may still be pending when the app quits.
+        terminateObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                try? self?.saveSession()
+            }
+        }
+    }
+
+    /// Persist shortly after any banks mutation, coalescing bursts
+    /// (e.g. a mixer slider drag) into a single write.
+    private func scheduleAutosave() {
+        autosaveTask?.cancel()
+        autosaveTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            guard !Task.isCancelled else { return }
+            try? self?.saveSession()
+        }
     }
 
     static func defaultSessionDirectory() -> URL {
@@ -112,33 +138,39 @@ final class BankStore: ObservableObject {
         let url = sessionFileURL
         if FileManager.default.fileExists(atPath: url.path),
            let data = try? Data(contentsOf: url),
-           let decoded = try? JSONDecoder().decode([SoundBank].self, from: data),
-           !decoded.isEmpty
+           let decoded = try? JSONDecoder().decode([SoundBank].self, from: data)
         {
-            banks = decoded
+            installBanks(decoded)
         } else {
-            banks = [SoundBank(name: "Bank 1", items: [])]
+            installBanks([])
         }
-        selectedBankIndex = 0
     }
 
     func saveSession() throws {
         try FileManager.default.createDirectory(at: sessionDirectory,
                                                 withIntermediateDirectories: true)
-        let data = try JSONEncoder().encode(banks)
-        try data.write(to: sessionFileURL)
+        try writeBanks(to: sessionFileURL)
     }
 
     // MARK: - Project files (explicit save/open; panels live in SoundPadApp)
 
     func saveProject(to url: URL) throws {
-        let data = try JSONEncoder().encode(banks)
-        try data.write(to: url)
+        try writeBanks(to: url)
     }
 
     func openProject(from url: URL) throws {
         let data = try Data(contentsOf: url)
         let decoded = try JSONDecoder().decode([SoundBank].self, from: data)
+        installBanks(decoded)
+    }
+
+    private func writeBanks(to url: URL) throws {
+        let data = try JSONEncoder().encode(banks)
+        try data.write(to: url)
+    }
+
+    /// Never leave the store with zero banks, and reset the selection.
+    private func installBanks(_ decoded: [SoundBank]) {
         banks = decoded.isEmpty ? [SoundBank(name: "Bank 1", items: [])] : decoded
         selectedBankIndex = 0
     }

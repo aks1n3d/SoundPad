@@ -11,10 +11,6 @@ struct ContentView: View {
     @EnvironmentObject var playbackEngine: PlaybackEngine
     @Environment(\.openWindow) private var openWindow
 
-    @AppStorage("outputDeviceUID") private var outputDeviceUID: String = ""
-
-    @State private var hotkeyMonitor = HotkeyMonitor()
-
     var body: some View {
         VStack {
             Picker("Bank", selection: $bankStore.selectedBankIndex) {
@@ -46,34 +42,7 @@ struct ContentView: View {
                 Text("No banks available")
             }
         }
-        .onChange(of: bankStore.banks) {
-            try? bankStore.saveSession()
-        }
-        .onAppear {
-            wireEngine()
-            startHotkeys()
-        }
-        .onDisappear {
-            hotkeyMonitor.stop()
-        }
         .frame(minWidth: 800, minHeight: 600)
-    }
-
-    private func wireEngine() {
-        playbackEngine.onBookmarkRefresh = { [weak bankStore] id, data in
-            bankStore?.refreshBookmark(for: id, data: data)
-            try? bankStore?.saveSession()
-        }
-        // Apply the persisted per-app output routing ("" = system default).
-        playbackEngine.setOutputDevice(uid: outputDeviceUID.isEmpty ? nil : outputDeviceUID)
-    }
-
-    private func startHotkeys() {
-        hotkeyMonitor.start { key in
-            guard let item = bankStore.item(withHotkey: key) else { return false }
-            playbackEngine.toggle(item: item)
-            return true
-        }
     }
 
     private func selectAudioFiles() {

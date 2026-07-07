@@ -47,11 +47,16 @@ struct PadGridView: View {
             accepted = true
             _ = provider.loadDataRepresentation(for: .fileURL) { data, _ in
                 guard let data,
-                      let fileURL = URL(dataRepresentation: data, relativeTo: nil),
-                      let type = UTType(filenameExtension: fileURL.pathExtension),
-                      type.conforms(to: .audio)
+                      let fileURL = URL(dataRepresentation: data, relativeTo: nil)
                 else { return }
-                DispatchQueue.main.async {
+                // Only reject files positively identified as non-audio;
+                // unknown or missing extensions get the benefit of the doubt
+                // (playback reports unreadable files at play time).
+                if let type = UTType(filenameExtension: fileURL.pathExtension),
+                   !type.conforms(to: .audio) {
+                    return
+                }
+                Task { @MainActor in
                     // Dropped URLs can arrive security-scoped; hold access while
                     // the bookmark is created inside addItems.
                     let hasScope = fileURL.startAccessingSecurityScopedResource()
