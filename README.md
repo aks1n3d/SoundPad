@@ -100,7 +100,7 @@ When it starts up:
 2. **Play/Stop** — click **Play**; the progress bar tracks playback. Click **Stop** to halt (with a fade-out if enabled).
 3. **Edit/Rename** — click **Edit** or double-click the name.
 4. **Delete** — removes the pad and releases its file.
-5. **Banks** — switch with the segmented control at the top; **New Bank** adds another.
+5. **Banks** — switch with the segmented control at the top; **New Bank** adds another, **Delete Bank** removes the current one (with confirmation; the last bank is replaced by a fresh empty one).
 6. **Mixer** — click **Mixer** in the toolbar for volume/pan/mute/solo and hotkey assignment.
 7. **Hotkeys** — type a key into the “Key” field of a mixer row; the pad shows a badge with its key.
 8. **Projects** — **File → Save Project As…** / **Open Project…** for portable `.json` sets.

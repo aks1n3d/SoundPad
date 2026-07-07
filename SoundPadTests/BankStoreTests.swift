@@ -40,6 +40,51 @@ struct BankStoreTests {
         #expect(store.selectedBank?.name == "Bank 2")
     }
 
+    @Test func deleteBankRemovesItAndClampsSelection() {
+        let store = BankStore(sessionDirectory: makeTempDirectory())
+        store.addBank()
+        store.addBank() // three banks, "Bank 3" selected
+        #expect(store.selectedBankIndex == 2)
+
+        store.deleteBank(at: 2)
+
+        #expect(store.banks.map(\.name) == ["Bank 1", "Bank 2"])
+        #expect(store.selectedBankIndex == 1)
+        #expect(store.selectedBank?.name == "Bank 2")
+    }
+
+    @Test func deleteMiddleBankKeepsOthersIntact() {
+        let store = BankStore(sessionDirectory: makeTempDirectory())
+        store.addItems(urls: [makeItemURL("a.mp3")])
+        store.addBank()
+        store.addBank()
+        store.selectedBankIndex = 0
+
+        store.deleteBank(at: 1)
+
+        #expect(store.banks.map(\.name) == ["Bank 1", "Bank 3"])
+        #expect(store.selectedBankIndex == 0)
+        #expect(store.banks[0].items.count == 1)
+    }
+
+    @Test func deletingLastBankLeavesFreshEmptyBank() {
+        let store = BankStore(sessionDirectory: makeTempDirectory())
+        store.addItems(urls: [makeItemURL("a.mp3")])
+
+        store.deleteBank(at: 0)
+
+        #expect(store.banks.count == 1)
+        #expect(store.banks[0].name == "Bank 1")
+        #expect(store.banks[0].items.isEmpty)
+        #expect(store.selectedBankIndex == 0)
+    }
+
+    @Test func deleteBankIgnoresInvalidIndex() {
+        let store = BankStore(sessionDirectory: makeTempDirectory())
+        store.deleteBank(at: 5)
+        #expect(store.banks.count == 1)
+    }
+
     @Test func addItemsAppendsToSelectedBank() {
         let store = BankStore(sessionDirectory: makeTempDirectory())
         store.addBank()

@@ -60,6 +60,18 @@ final class BankStore: ObservableObject {
         selectedBankIndex = banks.count - 1
     }
 
+    /// Remove a bank. The store never holds zero banks: deleting the last
+    /// one leaves a fresh empty "Bank 1". The caller is responsible for
+    /// unloading the bank's items from the playback engine first.
+    func deleteBank(at index: Int) {
+        guard banks.indices.contains(index) else { return }
+        banks.remove(at: index)
+        if banks.isEmpty {
+            banks = [SoundBank(name: "Bank 1", items: [])]
+        }
+        selectedBankIndex = min(selectedBankIndex, banks.count - 1)
+    }
+
     /// Append items for the given file URLs to the selected bank.
     /// Bookmarks are created by SoundPadItem's init, so this must be called
     /// while sandbox access to the URLs is live (after a panel or drop).
