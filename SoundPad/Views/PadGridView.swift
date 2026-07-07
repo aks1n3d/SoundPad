@@ -12,32 +12,50 @@ struct PadGridView: View {
     var bank: SoundBank
 
     let columns = [
-        GridItem(.flexible()),
-        GridItem(.flexible()),
-        GridItem(.flexible()),
-        GridItem(.flexible()),
+        GridItem(.adaptive(minimum: 150, maximum: 180), spacing: 18),
     ]
 
     var body: some View {
-        ScrollView {
-            LazyVGrid(columns: columns, spacing: 20) {
-                ForEach(bank.items) { item in
-                    PadView(
-                        item: item,
-                        renameAction: { newTitle in
-                            bankStore.renameItem(id: item.id, newTitle: newTitle)
-                        },
-                        deleteAction: {
-                            playbackEngine.unload(itemID: item.id)
-                            bankStore.deleteItem(id: item.id)
+        Group {
+            if bank.items.isEmpty {
+                emptyState
+            } else {
+                ScrollView {
+                    LazyVGrid(columns: columns, spacing: 18) {
+                        ForEach(bank.items) { item in
+                            PadView(
+                                item: item,
+                                renameAction: { newTitle in
+                                    bankStore.renameItem(id: item.id, newTitle: newTitle)
+                                },
+                                deleteAction: {
+                                    playbackEngine.unload(itemID: item.id)
+                                    bankStore.deleteItem(id: item.id)
+                                }
+                            )
                         }
-                    )
+                    }
+                    .padding()
                 }
             }
-            .padding()
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onDrop(of: [.fileURL], isTargeted: nil) { providers in
             handleDrop(providers: providers)
+        }
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "music.note.list")
+                .font(.system(size: 46))
+                .foregroundStyle(Theme.textSecondary)
+            Text("No sounds in this bank")
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(.white)
+            Text("Click ⊕ in the toolbar or drop audio files here")
+                .font(.callout)
+                .foregroundStyle(Theme.textSecondary)
         }
     }
 
