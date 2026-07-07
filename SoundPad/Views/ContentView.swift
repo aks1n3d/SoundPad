@@ -12,37 +12,59 @@ struct ContentView: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        VStack {
-            Picker("Bank", selection: $bankStore.selectedBankIndex) {
-                ForEach(bankStore.banks.indices, id: \.self) { i in
-                    Text(bankStore.banks[i].name).tag(i)
+        NavigationStack {
+            ZStack {
+                Theme.background
+                    .ignoresSafeArea()
+
+                VStack(spacing: 12) {
+                    Picker("Bank", selection: $bankStore.selectedBankIndex) {
+                        ForEach(bankStore.banks.indices, id: \.self) { i in
+                            Text(bankStore.banks[i].name).tag(i)
+                        }
+                    }
+                    .pickerStyle(SegmentedPickerStyle())
+                    .labelsHidden()
+                    .padding(.horizontal)
+                    .padding(.top, 10)
+
+                    if let bank = bankStore.selectedBank {
+                        PadGridView(bank: bank)
+                    } else {
+                        Text("No banks available")
+                            .foregroundStyle(Theme.textSecondary)
+                        Spacer()
+                    }
                 }
             }
-            .pickerStyle(SegmentedPickerStyle())
-            .padding(.horizontal)
+            .navigationTitle("SoundPad")
+            .toolbar {
+                ToolbarItemGroup {
+                    Button {
+                        selectAudioFiles()
+                    } label: {
+                        Label("Add Sound", systemImage: "plus")
+                    }
+                    .help("Add audio files")
 
-            HStack {
-                Button("Add Audio File") {
-                    selectAudioFiles()
-                }
-                Button("New Bank") {
-                    bankStore.addBank()
-                }
-                Spacer()
-                Button("Mixer") {
-                    openWindow(id: "mixer")
-                }
-            }
-            .padding(.vertical, 4)
-            .padding(.horizontal)
+                    Button {
+                        bankStore.addBank()
+                    } label: {
+                        Label("New Bank", systemImage: "folder.badge.plus")
+                    }
+                    .help("Create a new bank")
 
-            if let bank = bankStore.selectedBank {
-                PadGridView(bank: bank)
-            } else {
-                Text("No banks available")
+                    Button {
+                        openWindow(id: "mixer")
+                    } label: {
+                        Label("Mixer", systemImage: "slider.horizontal.3")
+                    }
+                    .help("Open the mixer")
+                }
             }
         }
         .frame(minWidth: 800, minHeight: 600)
+        .preferredColorScheme(.dark)
     }
 
     private func selectAudioFiles() {
