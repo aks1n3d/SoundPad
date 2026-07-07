@@ -2,66 +2,81 @@
 
 A simple **macOS** application built with **SwiftUI** that allows you to:
 
-- Quickly load and play sound files (MP3, WAV, M4A, etc.)  
-- Run multiple sounds in parallel  
-- Adjust volume and optionally apply **Fade In/Out** on playback  
-- Rename items, delete them, and organize them in “Banks” (sets)  
-- Save or load custom sets (projects) of sound files  
-- Choose your audio output device from within the app (via Core Audio)  
-- Optionally manage mixing settings (mute, solo, volume, and pan)  
-- Use drag & drop to import files  
-- Keep track of playback progress in real time  
+- Quickly load and play sound files (MP3, WAV, M4A, etc.)
+- Run multiple sounds in parallel through a single `AVAudioEngine`
+- Adjust volume and pan per sound, with optional **Fade In/Out**
+- Trigger pads with **keyboard hotkeys**
+- Rename items, delete them, and organize them in “Banks” (sets)
+- Save or load custom sets (projects) of sound files
+- Route the app's audio to any output device — **without changing your system default**
+- Mix live: volume, pan, mute, and solo per sound
+- Use drag & drop to import files
+- Keep track of playback progress in real time
 
-**Important**: This app **does not record from the microphone**; it only plays audio files. If you want to feed audio into Discord/Zoom as a “microphone,” use a virtual audio driver like **BlackHole**, then select that driver as Output in SoundPad and Input in your conferencing software.
+Imported sounds are remembered across launches via security-scoped bookmarks,
+so the sandboxed app keeps access to your files after a restart.
+
+**Important**: This app **does not record from the microphone**; it only plays
+audio files. If you want to feed audio into Discord/Zoom as a “microphone,”
+use a virtual audio driver like **BlackHole**, then select that driver as the
+Output Device in SoundPad's Preferences and as the Input in your conferencing
+software.
 
 ## Table of Contents
 
-- [Features](#features)  
-- [Screenshots](#screenshots)  
-- [Installation](#installation)  
-- [Usage](#usage)  
-- [Preferences](#preferences)  
-- [Building a Release](#building-a-release)  
-- [Contributing](#contributing)  
+- [Features](#features)
+- [Installation](#installation)
+- [Usage](#usage)
+- [Preferences](#preferences)
+- [Running the Tests](#running-the-tests)
+- [Building a Release](#building-a-release)
+- [Contributing](#contributing)
 - [License](#license)
 
 ---
 
 ## Features
 
-1. **Multiple Banks**  
+1. **Multiple Banks**
    Organize your sounds into different “banks” (e.g. “Music,” “SFX,” “Voice Clips”) and switch between them easily.
 
-2. **Parallel Playback**  
-   Several sounds can play at once. Each has its own volume control.
+2. **Parallel Playback**
+   Several sounds can play at once, each on its own player node with independent volume and pan.
 
-3. **Add/Rename/Delete**  
-   - Quickly add files via an “Open File” dialog or by **drag & drop** from Finder.  
-   - Rename an item by clicking “Edit” or double-clicking on its name.  
+3. **Add/Rename/Delete**
+   - Add files via “Add Audio File” or by **drag & drop** from Finder (non-audio files are rejected).
+   - Rename an item by clicking “Edit” or double-clicking its name.
    - Delete an item with the **Delete** button.
 
-4. **Playback Controls**  
-   - **Play/Stop** buttons for each sound.  
-   - Optional **Fade In/Out** for smoother transitions.
+4. **Playback Controls**
+   - **Play/Stop** per pad, with a live progress bar.
+   - Optional **Fade In/Out** for smooth starts and stops.
+   - Playing pads light up in your chosen highlight color.
 
-5. **Mixer**  
-   - A separate **Mixer** view to adjust volume, pan, mute, or solo for each sound.
+5. **Hotkeys**
+   Assign a single key to any pad (in the Mixer window). Pressing it toggles
+   that pad while the app is frontmost — except while you're typing in a text
+   field. Each key maps to at most one pad per bank.
 
-6. **Choose Output Device**  
-   - A built-in Preferences panel that lets you pick your audio device, so you can direct audio to **BlackHole** or any other device.
+6. **Mixer**
+   Open the **Mixer** window from the toolbar: volume and pan apply live to
+   playing sounds; **Mute** silences a sound without stopping it; **Solo**
+   silences everything else and restores it when released.
 
-7. **Save/Load Projects**  
-   - Save your current bank configurations (lists of sounds) to a `.json` file and load them later.
+7. **Per-App Output Device**
+   Pick an output device in Preferences (e.g. **BlackHole**). Only SoundPad's
+   audio is routed there — your system default output is left alone.
 
-8. **macOS 12+** Support  
-   - Uses SwiftUI and the modern Uniform Type Identifiers (UTI) for file handling.  
-   - On macOS 14 or newer, we use the recommended `.onChange` and `UTType.fileURL` APIs.
+8. **Save/Load Projects**
+   Save your current bank configuration to a `.json` file via
+   **File → Save Project As…** and load it back with **Open Project…**.
+   The current session is also auto-saved continuously.
 
 ---
 
 ## Installation
 
-1. **Install Xcode** (version 13 or higher, recommended macOS 12+).  
+1. **Install Xcode 16+** (the project targets macOS 15).
 2. **Clone** this repository:
    ```bash
    git clone https://github.com/YourUsername/SoundPad.git
@@ -71,49 +86,55 @@ A simple **macOS** application built with **SwiftUI** that allows you to:
    ```bash
    open SoundPad.xcodeproj
    ```
-4. **Build & Run** (select `Product` → `Build`, then `Product` → `Run` or press `Cmd + R`).  
+4. **Build & Run** (`Cmd + R`).
 
 When it starts up:
-- The app automatically creates a default “Bank 1.”  
+- The app automatically creates a default “Bank 1.”
 - **Add Audio File** to import .mp3, .wav, .m4a, etc.
 
 ---
 
 ## Usage
 
-1. **Load sounds**  
-   - Click **Add Audio File** and choose your audio files, or just **drag & drop** them onto the app window.  
-2. **Play/Stop**  
-   - Click the **Play** button to play. Click **Stop** to halt playback.  
-   - A small progress bar shows the playback progress in real time.  
-3. **Edit/Rename**  
-   - Click **Edit** (or double-click the name) to change a file’s title.  
-4. **Delete**  
-   - Click **Delete** to remove the file from the list.  
-5. **Banks**  
-   - The top segmented control switches between different banks. You can create new banks with **New Bank**.  
-6. **Projects**  
-   - Use **Save Project As…** to save your entire bank configuration (including multiple banks) to a JSON file, and **Open Project…** to load it back later.
+1. **Load sounds** — click **Add Audio File**, or drag & drop audio files onto the window.
+2. **Play/Stop** — click **Play**; the progress bar tracks playback. Click **Stop** to halt (with a fade-out if enabled).
+3. **Edit/Rename** — click **Edit** or double-click the name.
+4. **Delete** — removes the pad and releases its file.
+5. **Banks** — switch with the segmented control at the top; **New Bank** adds another.
+6. **Mixer** — click **Mixer** in the toolbar for volume/pan/mute/solo and hotkey assignment.
+7. **Hotkeys** — type a key into the “Key” field of a mixer row; the pad shows a badge with its key.
+8. **Projects** — **File → Save Project As…** / **Open Project…** for portable `.json` sets.
 
 ---
 
 ## Preferences
 
-Access **Preferences** (macOS 13+ “Settings…”) to:
+Open **Settings…** (`Cmd + ,`) to:
 
-- Toggle **Fade In/Out** for smoother playback transitions.  
-- Adjust highlight color in the UI.  
-- Select an **Output Device** (useful if you plan to route audio to BlackHole or a multi-output device).
+- Toggle **Fade In/Out**.
+- Pick the **highlight color** used for playing pads.
+- Select the **Output Device** for SoundPad's audio (e.g. BlackHole or a
+  multi-output device). “System Default” follows whatever macOS is using.
+
+---
+
+## Running the Tests
+
+Unit tests (Swift Testing) cover the data models, session/project persistence,
+hotkey assignment, and fade math:
+
+```bash
+xcodebuild -project SoundPad.xcodeproj -scheme SoundPad \
+  -destination 'platform=macOS' -only-testing:SoundPadTests test
+```
 
 ---
 
 ## Building a Release
 
-To create a release version:
-
-1. In Xcode, choose **Any Mac** as the run destination.  
-2. Go to **Product → Archive**.  
-3. In the **Organizer**, select your new archive, then click **Distribute App**.  
+1. In Xcode, choose **Any Mac** as the run destination.
+2. Go to **Product → Archive**.
+3. In the **Organizer**, select your new archive, then click **Distribute App**.
 4. You can sign/notarize the `.app` if you have an Apple Developer ID. Otherwise, you can export an unsigned `.app` for personal use or distribution to users who enable Gatekeeper for unidentified developers.
 
 ---
@@ -122,8 +143,8 @@ To create a release version:
 
 Feel free to:
 
-- **Open an issue** if you find bugs or have feature requests.  
-- **Submit Pull Requests** if you’d like to fix an issue or enhance the code.  
+- **Open an issue** if you find bugs or have feature requests.
+- **Submit Pull Requests** if you’d like to fix an issue or enhance the code.
 - Provide feedback or suggestions for improvement.
 
 ---
