@@ -44,7 +44,7 @@ final class BankStore: ObservableObject {
         }
     }
 
-    static func defaultSessionDirectory() -> URL {
+    nonisolated static func defaultSessionDirectory() -> URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
     }
 
