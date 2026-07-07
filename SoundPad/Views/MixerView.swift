@@ -1,102 +1,123 @@
 //
 //  MixerView.swift
-//  Микшер для громкости, панорамы, mute/solo
+//  Volume, pan, mute/solo and hotkey per pad. Volume/pan persist via
+//  BankStore; mute/solo are runtime state in PlaybackEngine.
 //
 
 import SwiftUI
 
 struct MixerView: View {
-    @EnvironmentObject var audioEngineManager: AudioEngineManager
-    @State private var soloItemID: UUID?
+    @EnvironmentObject var bankStore: BankStore
+    @EnvironmentObject var playbackEngine: PlaybackEngine
 
     var body: some View {
         VStack {
             Text("Mixer")
                 .font(.title)
 
-            if audioEngineManager.selectedBankIndex < audioEngineManager.banks.count {
-                let bank = audioEngineManager.banks[audioEngineManager.selectedBankIndex]
+            if let bank = bankStore.selectedBank, !bank.items.isEmpty {
                 List {
                     ForEach(bank.items) { item in
-                        MixerRow(item: binding(for: item), soloItemID: $soloItemID)
+                        MixerRow(item: item)
                     }
                 }
             } else {
-                Text("No bank selected.")
+                Text("No sounds in the selected bank.")
+                    .foregroundStyle(.secondary)
+                Spacer()
             }
         }
-        .frame(minWidth: 400, minHeight: 400)
-    }
-
-    private func binding(for item: SoundPadItem) -> Binding<SoundPadItem> {
-        guard let bankIndex = audioEngineManager.banks.firstIndex(where: { $0.id == audioEngineManager.banks[audioEngineManager.selectedBankIndex].id }),
-              let itemIndex = audioEngineManager.banks[bankIndex].items.firstIndex(where: { $0.id == item.id })
-        else {
-            return .constant(item)
-        }
-        return Binding<SoundPadItem>(
-            get: {
-                audioEngineManager.banks[bankIndex].items[itemIndex]
-            },
-            set: { newValue in
-                audioEngineManager.banks[bankIndex].items[itemIndex] = newValue
-            }
-        )
+        .padding(.top, 8)
+        .frame(minWidth: 560, minHeight: 400)
     }
 }
 
 struct MixerRow: View {
-    @Binding var item: SoundPadItem
-    @Binding var soloItemID: UUID?
-    @EnvironmentObject var audioEngineManager: AudioEngineManager
+    @EnvironmentObject var bankStore: BankStore
+    @EnvironmentObject var playbackEngine: PlaybackEngine
 
-    @State private var isMuted = false
+    let item: SoundPadItem
+
+    @State private var hotkeyText: String = ""
+
+    private var isMuted: Bool {
+        playbackEngine.mutedItemIDs.contains(item.id)
+    }
 
     private var isSolo: Bool {
-        soloItemID == item.id
+        playbackEngine.soloItemID == item.id
     }
 
     var body: some View {
         HStack {
-            Text(item.title).frame(width: 100, alignment: .leading)
+            Text(item.title)
+                .frame(width: 110, alignment: .leading)
+                .lineLimit(1)
 
-            // Громкость
-            Slider(value: $item.volume, in: 0...1)
-                .frame(width: 100)
-                .onChange(of: item.volume) { newVal in
-                    // Если звук играет – обновим громкость "на лету"
-                    if let player = audioEngineManager.audioPlayers[item.id] {
-                        player.volume = newVal
-                    }
-                }
+            Label {
+                Slider(value: volumeBinding, in: 0...1)
+                    .frame(width: 100)
+            } icon: {
+                Image(systemName: "speaker.wave.2")
+            }
 
-            // Пан
-            Slider(value: $item.pan, in: -1...1)
-                .frame(width: 100)
+            Label {
+                Slider(value: panBinding, in: -1...1)
+                    .frame(width: 100)
+            } icon: {
+                Image(systemName: "arrow.left.and.right")
+            }
 
             Button(isMuted ? "Unmute" : "Mute") {
-                isMuted.toggle()
-                if isMuted {
-                    audioEngineManager.stopSound(item: item)
-                }
+                playbackEngine.toggleMute(item.id)
             }
 
             Button(isSolo ? "Unsolo" : "Solo") {
-                if isSolo {
-                    soloItemID = nil
-                } else {
-                    soloItemID = item.id
-                    muteOthersExcept(item.id)
-                }
+                playbackEngine.setSolo(isSolo ? nil : item.id)
             }
+
+            TextField("Key", text: $hotkeyText)
+                .frame(width: 36)
+                .multilineTextAlignment(.center)
+                .onChange(of: hotkeyText) { _, newValue in
+                    commitHotkey(newValue)
+                }
+        }
+        .onAppear {
+            hotkeyText = item.hotkey ?? ""
+        }
+        .onChange(of: item.hotkey) { _, newValue in
+            // Assigning this key to another pad clears it here.
+            hotkeyText = newValue ?? ""
         }
     }
 
-    private func muteOthersExcept(_ keepID: UUID) {
-        for (id, player) in audioEngineManager.audioPlayers {
-            if id != keepID {
-                player.stop()
+    private var volumeBinding: Binding<Float> {
+        Binding(
+            get: { bankStore.item(id: item.id)?.volume ?? item.volume },
+            set: { newValue in
+                bankStore.updateItem(id: item.id) { $0.volume = newValue }
+                playbackEngine.setVolume(newValue, for: item.id)
             }
+        )
+    }
+
+    private var panBinding: Binding<Float> {
+        Binding(
+            get: { bankStore.item(id: item.id)?.pan ?? item.pan },
+            set: { newValue in
+                bankStore.updateItem(id: item.id) { $0.pan = newValue }
+                playbackEngine.setPan(newValue, for: item.id)
+            }
+        )
+    }
+
+    private func commitHotkey(_ text: String) {
+        // Keep at most one character; typing replaces the old binding.
+        let key = text.suffix(1).lowercased()
+        if key != text {
+            hotkeyText = String(key)
         }
+        bankStore.assignHotkey(key.isEmpty ? nil : String(key), to: item.id)
     }
 }

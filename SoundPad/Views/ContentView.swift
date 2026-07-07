@@ -1,20 +1,25 @@
 //
 //  ContentView.swift
-//  Главное окно. Без записи, только воспроизведение.
+//  Main window: bank picker, toolbar, pad grid. Playback only, no recording.
 //
 
 import SwiftUI
 import UniformTypeIdentifiers
 
 struct ContentView: View {
-    @EnvironmentObject var audioEngineManager: AudioEngineManager
+    @EnvironmentObject var bankStore: BankStore
+    @EnvironmentObject var playbackEngine: PlaybackEngine
+    @Environment(\.openWindow) private var openWindow
+
+    @AppStorage("outputDeviceUID") private var outputDeviceUID: String = ""
+
+    @State private var hotkeyMonitor = HotkeyMonitor()
 
     var body: some View {
         VStack {
-            // Выбор банка (SegmentedPicker)
-            Picker("Bank", selection: $audioEngineManager.selectedBankIndex) {
-                ForEach(audioEngineManager.banks.indices, id: \.self) { i in
-                    Text(audioEngineManager.banks[i].name).tag(i)
+            Picker("Bank", selection: $bankStore.selectedBankIndex) {
+                ForEach(bankStore.banks.indices, id: \.self) { i in
+                    Text(bankStore.banks[i].name).tag(i)
                 }
             }
             .pickerStyle(SegmentedPickerStyle())
@@ -25,24 +30,50 @@ struct ContentView: View {
                     selectAudioFiles()
                 }
                 Button("New Bank") {
-                    addNewBank()
+                    bankStore.addBank()
                 }
                 Spacer()
+                Button("Mixer") {
+                    openWindow(id: "mixer")
+                }
             }
             .padding(.vertical, 4)
             .padding(.horizontal)
 
-            if audioEngineManager.selectedBankIndex < audioEngineManager.banks.count {
-                let bank = audioEngineManager.banks[audioEngineManager.selectedBankIndex]
+            if let bank = bankStore.selectedBank {
                 PadGridView(bank: bank)
             } else {
                 Text("No banks available")
             }
         }
-        .onChange(of: audioEngineManager.banks) { _ in
-            audioEngineManager.saveSession()
+        .onChange(of: bankStore.banks) {
+            try? bankStore.saveSession()
+        }
+        .onAppear {
+            wireEngine()
+            startHotkeys()
+        }
+        .onDisappear {
+            hotkeyMonitor.stop()
         }
         .frame(minWidth: 800, minHeight: 600)
+    }
+
+    private func wireEngine() {
+        playbackEngine.onBookmarkRefresh = { [weak bankStore] id, data in
+            bankStore?.refreshBookmark(for: id, data: data)
+            try? bankStore?.saveSession()
+        }
+        // Apply the persisted per-app output routing ("" = system default).
+        playbackEngine.setOutputDevice(uid: outputDeviceUID.isEmpty ? nil : outputDeviceUID)
+    }
+
+    private func startHotkeys() {
+        hotkeyMonitor.start { key in
+            guard let item = bankStore.item(withHotkey: key) else { return false }
+            playbackEngine.toggle(item: item)
+            return true
+        }
     }
 
     private func selectAudioFiles() {
@@ -50,17 +81,7 @@ struct ContentView: View {
         panel.allowsMultipleSelection = true
         panel.allowedContentTypes = [.audio]
         if panel.runModal() == .OK {
-            guard audioEngineManager.selectedBankIndex < audioEngineManager.banks.count else { return }
-            for url in panel.urls {
-                let newItem = SoundPadItem(title: url.lastPathComponent, url: url)
-                audioEngineManager.banks[audioEngineManager.selectedBankIndex].items.append(newItem)
-            }
+            bankStore.addItems(urls: panel.urls)
         }
-    }
-
-    private func addNewBank() {
-        let newBank = SoundBank(name: "Bank \(audioEngineManager.banks.count + 1)", items: [])
-        audioEngineManager.banks.append(newBank)
-        audioEngineManager.selectedBankIndex = audioEngineManager.banks.count - 1
     }
 }

@@ -1,12 +1,14 @@
 //
 //  PadGridView.swift
-//  Сетка пэдов. Drag & Drop файлов.
+//  Pad grid with drag & drop import of audio files.
 //
 
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct PadGridView: View {
-    @EnvironmentObject var audioEngineManager: AudioEngineManager
+    @EnvironmentObject var bankStore: BankStore
+    @EnvironmentObject var playbackEngine: PlaybackEngine
     var bank: SoundBank
 
     let columns = [
@@ -20,14 +22,14 @@ struct PadGridView: View {
         ScrollView {
             LazyVGrid(columns: columns, spacing: 20) {
                 ForEach(bank.items) { item in
-                    // Передаём колбэки rename/delete
                     PadView(
                         item: item,
                         renameAction: { newTitle in
-                            audioEngineManager.renameItem(item, newTitle: newTitle)
+                            bankStore.renameItem(id: item.id, newTitle: newTitle)
                         },
                         deleteAction: {
-                            audioEngineManager.deleteItem(item)
+                            playbackEngine.unload(itemID: item.id)
+                            bankStore.deleteItem(id: item.id)
                         }
                     )
                 }
@@ -40,18 +42,24 @@ struct PadGridView: View {
     }
 
     private func handleDrop(providers: [NSItemProvider]) -> Bool {
-        guard let bankIndex = audioEngineManager.banks.firstIndex(where: { $0.id == bank.id }) else { return false }
-
-        for provider in providers {
-            provider.loadItem(forTypeIdentifier: kUTTypeFileURL as String, options: nil) { (urlData, error) in
+        var accepted = false
+        for provider in providers where provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
+            accepted = true
+            _ = provider.loadDataRepresentation(for: .fileURL) { data, _ in
+                guard let data,
+                      let fileURL = URL(dataRepresentation: data, relativeTo: nil),
+                      let type = UTType(filenameExtension: fileURL.pathExtension),
+                      type.conforms(to: .audio)
+                else { return }
                 DispatchQueue.main.async {
-                    if let data = urlData as? Data, let fileURL = URL(dataRepresentation: data, relativeTo: nil) {
-                        let newItem = SoundPadItem(title: fileURL.lastPathComponent, url: fileURL)
-                        audioEngineManager.banks[bankIndex].items.append(newItem)
-                    }
+                    // Dropped URLs can arrive security-scoped; hold access while
+                    // the bookmark is created inside addItems.
+                    let hasScope = fileURL.startAccessingSecurityScopedResource()
+                    bankStore.addItems(urls: [fileURL])
+                    if hasScope { fileURL.stopAccessingSecurityScopedResource() }
                 }
             }
         }
-        return true
+        return accepted
     }
 }
