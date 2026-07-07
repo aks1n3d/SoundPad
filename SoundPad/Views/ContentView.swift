@@ -11,6 +11,8 @@ struct ContentView: View {
     @EnvironmentObject var playbackEngine: PlaybackEngine
     @Environment(\.openWindow) private var openWindow
 
+    @State private var showDeleteBankConfirmation = false
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -55,6 +57,13 @@ struct ContentView: View {
                     .help("Create a new bank")
 
                     Button {
+                        showDeleteBankConfirmation = true
+                    } label: {
+                        Label("Delete Bank", systemImage: "folder.badge.minus")
+                    }
+                    .help("Delete the current bank")
+
+                    Button {
                         openWindow(id: "mixer")
                     } label: {
                         Label("Mixer", systemImage: "slider.horizontal.3")
@@ -62,9 +71,28 @@ struct ContentView: View {
                     .help("Open the mixer")
                 }
             }
+            .confirmationDialog(
+                "Delete \u{201C}\(bankStore.selectedBank?.name ?? "this bank")\u{201D}?",
+                isPresented: $showDeleteBankConfirmation
+            ) {
+                Button("Delete Bank", role: .destructive) {
+                    deleteSelectedBank()
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Its \(bankStore.selectedBank?.items.count ?? 0) sound(s) are removed from SoundPad. The audio files on disk are not touched.")
+            }
         }
         .frame(minWidth: 800, minHeight: 600)
         .preferredColorScheme(.dark)
+    }
+
+    private func deleteSelectedBank() {
+        guard let bank = bankStore.selectedBank else { return }
+        for item in bank.items {
+            playbackEngine.unload(itemID: item.id)
+        }
+        bankStore.deleteBank(at: bankStore.selectedBankIndex)
     }
 
     private func selectAudioFiles() {
